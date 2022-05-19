@@ -1,5 +1,6 @@
+# %%
 import numpy as np
-import csv
+import pandas as pd
 from time import time
 from abess.linear import LogisticRegression
 from sklearn.metrics import roc_auc_score
@@ -10,6 +11,15 @@ from sklearn.model_selection import train_test_split, GridSearchCV
 import os
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
+# %% read data
+X = pd.read_csv('chin_x.txt', header=0)
+X = X.to_numpy()
+y = pd.read_csv('chin_y.txt')
+y = np.array(y, dtype = float)
+y = np.reshape(y, -1)
+print("sample size: {0}, dimension: {1}".format(X.shape[0], X.shape[1]))
+
+# %% evaluation
 def metrics(coef, pred, real):
     auc = roc_auc_score(real, pred)
 
@@ -32,20 +42,7 @@ verbose = True
 met = np.zeros((len(method), M, 3))
 res = np.zeros((len(method), 6))
 
-# read data
-with open('./chowdary_x.txt', 'r') as f:
-    reader = csv.reader(f)
-    X = [row for row in reader]
-X = np.array(X, dtype = float)
-
-with open('./chowdary_y.txt', 'r') as f:
-    reader = csv.reader(f)
-    y = [row for row in reader]
-y = np.array(y, dtype = float)
-y = np.reshape(y, -1)
-
-
-# Test
+# %% Test
 print('===== Testing '+ model_name + ' =====')
 for m in range(M):
     ind = -1
@@ -74,6 +71,7 @@ for m in range(M):
 
         if verbose:
             print("     --> SKL time: " + str(t_end - t_start))
+            print("     --> SKL AUC : " + str(met[ind, m, 0]))
 
     ## celer
     if "celer" in method:
@@ -91,6 +89,7 @@ for m in range(M):
 
         if verbose:
             print("     --> Celer time: " + str(t_end - t_start))
+            print("     --> Celer AUC : " + str(met[ind, m, 0]))
     
     ## abess
     if "abess" in method:
@@ -98,16 +97,17 @@ for m in range(M):
 
         t_start = time()
         # model = abessLogistic(is_cv = True, path_type = "pgs", s_min = 0, s_max = 99, thread = 0)
-        model = LogisticRegression(cv=5, support_size = range(100), thread = 5, 
+        model = LogisticRegression(cv=5, support_size = range(100), thread=5, 
                                    approximate_Newton = True, primary_model_fit_epsilon=1e-6)
         model.fit(trainx, trainy)
         t_end = time()
 
-        met[ind, m, 0:2] = metrics(model.coef_, model.predict_proba(testx), testy)
+        met[ind, m, 0:2] = metrics(model.coef_, model.predict_proba(testx)[:, 1].flatten(), testy)
         met[ind, m, 2] = t_end - t_start
 
         if verbose:
             print("     --> ABESS time: " + str(t_end - t_start))
+            print("     --> ABESS AUC : " + str(met[ind, m, 0]))
 
 for ind in range(0, len(method)):
     m = met[ind].mean(axis = 0)
