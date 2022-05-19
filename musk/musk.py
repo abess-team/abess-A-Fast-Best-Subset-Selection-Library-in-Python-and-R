@@ -15,7 +15,7 @@ def metrics(coef, pred, real):
     nnz = len(np.nonzero(coef)[0])
     return np.array([auc, nnz])
 
-M = 100
+M = 20
 model_name = "Logistic"
 method = [
     "lasso",
@@ -50,8 +50,7 @@ print("sample size: {0}, dimension: {1}".format(X.shape[0], X.shape[1]))
 print('===== Testing '+ model_name + ' =====')
 for m in range(M):
     ind = -1
-    if (m % 10 == 0):
-        print(" --> iter: " + str(m))
+    print(" --> Replication: " + str(m+1))
 
     trainx, testx, trainy, testy = train_test_split(X, y, test_size = 0.1, random_state = m)
 
@@ -67,7 +66,8 @@ for m in range(M):
         ind += 1
 
         t_start = time()
-        model = LogisticRegressionCV(Cs=alphas, penalty="l1", solver="saga", cv=5, n_jobs=5)
+        # set max_iter=5000 to avoid ConvergenceWarning messages
+        model = LogisticRegressionCV(Cs=alphas, penalty="l1", solver="saga", cv=5, n_jobs=5, max_iter=5000) 
         fit = model.fit(trainx, trainy)
         t_end = time()
 

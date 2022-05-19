@@ -18,8 +18,6 @@ library(elasticnet)
 library(abess)
 library(data.table)
 
-# setwd("D:\\Users\\BMI319\\Desktop\\hjh\\realdata")
-
 load("christensen.RData")
 
 community <- christensen[["x"]]

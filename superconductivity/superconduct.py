@@ -1,13 +1,32 @@
+# %%
 import numpy as np
-import csv
 from time import time
 from abess.linear import LinearRegression
 from sklearn.metrics import mean_squared_error
 from sklearn.linear_model import LassoCV, OrthogonalMatchingPursuitCV
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.kernel_approximation import RBFSampler
 from celer import LassoCV as celerLassoCV
 from sklearn.model_selection import train_test_split
 import pandas as pd
+import os
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
+# %%
+## preprocess superconduct data: create a high-dimensional data
+data = pd.read_csv("train.csv")
+data = data.loc[data["number_of_elements"] == 3, :]
+data = data.drop(columns=['number_of_elements'])
+y = data.loc[:, 'critical_temp']
+X = data.drop(columns=['critical_temp'])
+
+# %%
+feature = PolynomialFeatures(include_bias=False, degree=3, interaction_only=True)
+# feature = RBFSampler(random_state=0, gamma=0.1, n_components=1e4)
+X = feature.fit_transform(X)
+y = np.reshape(y, -1)
+
+# %%
 def metrics(coef, pred, real):
     auc = mean_squared_error(real, pred)
 
@@ -16,51 +35,30 @@ def metrics(coef, pred, real):
     return np.array([auc, nnz])
 
 M = 20
-model_name = "Lm"
+model_name = "Linear"
 method = [
     # "lasso",
     "celer",
-    # "omp", 
+    # "omp",  # uncomment this line because of memory leak
     "abess",
 ]
 res_output = True
 data_output = False
+verbose = True
 
-# AUC, NNZ, time
+# MSE, NNZ, time
 met = np.zeros((len(method), M, 3))
 res = np.zeros((len(method), 6))
 
-# read data
-# file_name = "popularity"
-file_name = "superconduct"
-
-# with open('./superconduct_x.txt', 'r') as f:
-#     reader = csv.reader(f)
-#     X = [row for row in reader]
-# X = np.array(X, dtype = float)
-X = pd.read_csv("{0}_x.txt".format(file_name)).to_numpy()
-
-# with open('./superconduct_y.txt', 'r' as f:
-#     reader = csv.reader(f)
-#     y = [row for row in reader]
-# y = np.array(y, dtype = float)
-y = pd.read_csv("{0}_y.txt".format(file_name)).to_numpy()
-y = np.reshape(y, -1)
-
-print(X.shape)
-print(y.shape)
+print("sample size: {}, dimension: {}".format(X.shape[0], X.shape[1]))
 
 # Test
 print('===== Testing '+ model_name + ' =====')
 for m in range(M):
     ind = -1
-    if (m % 10 == 0):
-        print(" --> iter: " + str(m))
+    print(" --> Replication: " + str(m+1))
 
-    if X.shape[0] <= X.shape[1]:
-        trainx, testx, trainy, testy = train_test_split(X, y, test_size = 0.1, random_state = m)
-    else:
-        trainx, testx, trainy, testy = train_test_split(X, y, test_size = 0.3, random_state = m)    
+    trainx, testx, trainy, testy = train_test_split(X, y, test_size=0.1, random_state=m)
 
     if "lasso" in method:
         ind += 1
@@ -100,6 +98,7 @@ for m in range(M):
         met[ind, m, 0:2] = metrics(fit.coef_, fit.predict(testx), testy)
         met[ind, m, 2] = t_end - t_start
         print("     --> OMP time: " + str(t_end - t_start))
+        print("     --> OMP err : " + str(met[ind, m, 0]))
 
     ## abess
     if "abess" in method:
@@ -107,8 +106,7 @@ for m in range(M):
         max_supp = np.min([100, trainx.shape[1]])
 
         t_start = time()
-        # model = abessLogistic(is_cv = True, path_type = "pgs", s_min = 0, s_max = 99, thread = 0)
-        model = LinearRegression(cv=5, support_size = range(max_supp), thread = 5, important_search=100)
+        model = LinearRegression(cv=5, support_size = range(max_supp), thread=5)
         model.fit(trainx, trainy)
         t_end = time()
 
@@ -121,16 +119,12 @@ for ind in range(0, len(method)):
     m = met[ind].mean(axis = 0)
     se = met[ind].std(axis = 0) / np.sqrt(M - 1)
     res[ind] = np.hstack((m, se))
+    res = np.around(res, decimals=2)
 
 print("===== Results " + model_name + " =====")
 print("Method: \n", method)
-print("Metrics: \n", res[:, 0:3])
-print("Err: \n", res[:, 3:6])
+print("Metrics (MSE, NNZ, Runtime): \n", res[:, 0:3])
 
 if (res_output):
     np.save(model_name + "_res.npy", res)
     print("Result saved.")
-
-if (data_output):
-    np.save(model_name + "_data.npy", met) 
-    print("Data saved.")
