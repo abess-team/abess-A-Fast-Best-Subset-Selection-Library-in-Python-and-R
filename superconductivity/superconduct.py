@@ -5,7 +5,6 @@ from abess.linear import LinearRegression
 from sklearn.metrics import mean_squared_error
 from sklearn.linear_model import LassoCV, OrthogonalMatchingPursuitCV
 from sklearn.preprocessing import PolynomialFeatures
-from sklearn.kernel_approximation import RBFSampler
 from celer import LassoCV as celerLassoCV
 from sklearn.model_selection import train_test_split
 import pandas as pd
