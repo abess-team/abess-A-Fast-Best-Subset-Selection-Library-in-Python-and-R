@@ -64,7 +64,7 @@ for m in range(M):
         lasso_trainx = scaler.transform(trainx)
         lasso_testx = scaler.transform(testx)
         t_start = time()
-        model = LassoCV(cv=5, n_jobs=5, random_state=0, tol=5e-4)
+        model = LassoCV(cv=5, n_jobs=5, random_state=0, tol=2e-3)
         fit = model.fit(lasso_trainx, trainy)
         t_end = time()
 

@@ -27,7 +27,7 @@ def metrics(coef, pred, real):
 
     return np.array([auc, nnz])
 
-M = 1
+M = 20
 model_name = "Logistic"
 method = [
     "lasso",
