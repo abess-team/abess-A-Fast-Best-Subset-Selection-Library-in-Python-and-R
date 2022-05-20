@@ -6,7 +6,6 @@ from abess.linear import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.linear_model import LogisticRegressionCV
 from celer import LogisticRegression as celerLogisticRegressionCV
-from celer import celer_path
 from sklearn.model_selection import train_test_split, GridSearchCV
 import os
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -14,12 +13,13 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 # %% read data
 X = pd.read_csv('chin_x.txt', header=0)
 X = X.to_numpy()
-y = pd.read_csv('chin_y.txt')
+y = pd.read_csv('chin_y.txt', header=0)
 y = np.array(y, dtype = float)
 y = np.reshape(y, -1)
 print("sample size: {0}, dimension: {1}".format(X.shape[0], X.shape[1]))
 
 # %% evaluation
+
 def metrics(coef, pred, real):
     auc = roc_auc_score(real, pred)
 
@@ -27,11 +27,11 @@ def metrics(coef, pred, real):
 
     return np.array([auc, nnz])
 
-M = 20
+M = 1
 model_name = "Logistic"
 method = [
     "lasso",
-    # "celer", 
+    "celer", 
     "abess",
 ]
 res_output = True
@@ -48,7 +48,7 @@ for m in range(M):
     ind = -1
     print(" --> Replication: " + str(m+1))
 
-    trainx, testx, trainy, testy = train_test_split(X, y, test_size = 0.1, random_state = m)
+    trainx, testx, trainy, testy = train_test_split(X, y, test_size=0.1, random_state=m)
 
     # method 1:
     # alphas, t1, t2, t3 = celer_path(trainx, 2 * trainy - 1, pb="logreg")
@@ -62,9 +62,11 @@ for m in range(M):
         ind += 1
 
         t_start = time()
-        model = LogisticRegressionCV(Cs=alphas, penalty="l1", solver = "liblinear", cv=5, n_jobs=5)
+        model = LogisticRegressionCV(Cs=alphas, penalty="l1", 
+                                     solver = "liblinear", cv=5, n_jobs=5, random_state=0)
         fit = model.fit(trainx, trainy)
         t_end = time()
+        best_lasso_C = fit.C_[0]
 
         met[ind, m, 0:2] = metrics(fit.coef_, fit.predict_proba(testx)[:, 1].flatten(), testy)
         met[ind, m, 2] = t_end - t_start
@@ -72,24 +74,37 @@ for m in range(M):
         if verbose:
             print("     --> SKL time: " + str(t_end - t_start))
             print("     --> SKL AUC : " + str(met[ind, m, 0]))
+            print("     --> SKL NNZ : " + str(met[ind, m, 1]))
 
     ## celer
     if "celer" in method:
         ind += 1
       
-        parameters = {'C': alphas}
-        model = celerLogisticRegressionCV()
-        model = GridSearchCV(model, parameters, n_jobs=-1, cv=5)
-        t_start = time()
-        fit = model.fit(trainx, trainy)
-        t_end = time()
+        tune_celer = False
+        if tune_celer:
+            parameters = {'C': alphas}
+            t_start = time()
+            model = celerLogisticRegressionCV()
+            model = GridSearchCV(model, parameters, n_jobs=-1, cv=5)
+            fit = model.fit(trainx, trainy)
+            t_end = time()
 
-        met[ind, m, 0:2] = metrics(fit.best_estimator_.coef_, fit.predict_proba(testx)[:, 1].flatten(), testy)
+            met[ind, m, 0:2] = metrics(fit.best_estimator_.coef_, fit.predict_proba(testx)[:, 1].flatten(), testy)
+        else:
+            t_start = time()
+            # ConvergenceWarning occurs, so increase `tol` and `max_iter`
+            model = celerLogisticRegressionCV(C=best_lasso_C)
+            fit = model.fit(trainx, trainy)
+            t_end = time()
+
+            met[ind, m, 0:2] = metrics(fit.coef_, fit.predict_proba(testx)[:, 1].flatten(), testy)
+
         met[ind, m, 2] = t_end - t_start
 
         if verbose:
             print("     --> Celer time: " + str(t_end - t_start))
             print("     --> Celer AUC : " + str(met[ind, m, 0]))
+            print("     --> Celer NNZ : " + str(met[ind, m, 1]))
     
     ## abess
     if "abess" in method:
@@ -108,6 +123,7 @@ for m in range(M):
         if verbose:
             print("     --> ABESS time: " + str(t_end - t_start))
             print("     --> ABESS AUC : " + str(met[ind, m, 0]))
+            print("     --> ABESS NNZ : " + str(met[ind, m, 1]))
 
 for ind in range(0, len(method)):
     m = met[ind].mean(axis = 0)
@@ -119,6 +135,8 @@ print("===== Results " + model_name + " =====")
 print("Method: \n", method)
 print("Metrics (AUC, NNZ, Runtime): \n", res[:, 0:3])
 
+file_name = "chin"
 if (res_output):
-    np.save(model_name + "_res.npy", res)
+    np.save("{}_{}_res.npy".format(model_name, file_name), res)
     print("Result saved.")
+

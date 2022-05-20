@@ -1,6 +1,6 @@
+# %% 
 import numpy as np
 import pandas as pd
-import csv
 from time import time
 from abess.linear import LogisticRegression
 from sklearn.metrics import roc_auc_score
@@ -10,41 +10,41 @@ from sklearn.model_selection import train_test_split, GridSearchCV
 import os
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
+# %% read data
+data1 = pd.read_csv("clean1.data", header=None)
+data1 = data1.drop(data1.columns[[0, 1]], axis=1)
+data1 = data1.to_numpy()
+data2 = pd.read_csv("clean2.data", header=None)
+data2 = data2.drop(data2.columns[[0, 1]], axis=1)
+data2 = data2.to_numpy()
+data = np.vstack([data1, data2])
+X = data[:, range(data.shape[1]-1)]
+y = data[:, -1]
+y = np.array(y, dtype=float)
+y = np.reshape(y, -1)
+print("sample size: {0}, dimension: {1}".format(X.shape[0], X.shape[1]))
+print(y.shape)
+
+# %% evaluation
 def metrics(coef, pred, real):
     auc = roc_auc_score(real, pred)
     nnz = len(np.nonzero(coef)[0])
     return np.array([auc, nnz])
 
-M = 20
+M = 1
 model_name = "Logistic"
 method = [
     "lasso",
-    # "celer", 
+    "celer", 
     "abess",
 ]
 res_output = True
 data_output = False
-verbose = False
+verbose = True
 
 # AUC, NNZ, time
 met = np.zeros((len(method), M, 3))
 res = np.zeros((len(method), 6))
-
-# read data
-file_name = "musk"
-with open('./{0}_x.txt'.format(file_name), 'r') as f:
-    reader = csv.reader(f)
-    X = [row for row in reader]
-X = np.array(X, dtype = float)
-
-with open('./{0}_y.txt'.format(file_name), 'r') as f:
-    reader = csv.reader(f)
-    y = [row for row in reader]
-y = np.array(y, dtype = float)
-y = np.reshape(y, -1)
-print("sample size: {0}, dimension: {1}".format(X.shape[0], X.shape[1]))
-
-
 
 # Test
 print('===== Testing '+ model_name + ' =====')
@@ -67,9 +67,10 @@ for m in range(M):
 
         t_start = time()
         # set max_iter=5000 to avoid ConvergenceWarning messages
-        model = LogisticRegressionCV(Cs=alphas, penalty="l1", solver="saga", cv=5, n_jobs=5, max_iter=5000) 
+        model = LogisticRegressionCV(Cs=alphas, penalty="l1", solver="saga", cv=5, n_jobs=5, max_iter=5000, random_state=0) 
         fit = model.fit(trainx, trainy)
         t_end = time()
+        best_lasso_C = fit.C_[0]
 
         met[ind, m, 0:2] = metrics(fit.coef_, fit.predict_proba(testx)[:, 1].flatten(), testy)
         met[ind, m, 2] = t_end - t_start
@@ -83,13 +84,25 @@ for m in range(M):
         ind += 1
       
         parameters = {'C': alphas}
-        model = celerLogisticRegressionCV(warm_start=True)
-        model = GridSearchCV(model, parameters, n_jobs=-1, cv=5)
-        t_start = time()
-        fit = model.fit(trainx, trainy)
-        t_end = time()
+        tune_celer = False
+        if tune_celer:
+            parameters = {'C': alphas}
+            t_start = time()
+            model = celerLogisticRegressionCV()
+            model = GridSearchCV(model, parameters, n_jobs=-1, cv=5)
+            fit = model.fit(trainx, trainy)
+            t_end = time()
 
-        met[ind, m, 0:2] = metrics(fit.best_estimator_.coef_, fit.predict_proba(testx)[:, 1].flatten(), testy)
+            met[ind, m, 0:2] = metrics(fit.best_estimator_.coef_, fit.predict_proba(testx)[:, 1].flatten(), testy)
+        else:
+            t_start = time()
+            # ConvergenceWarning frequently occurs, so increase `tol`
+            model = celerLogisticRegressionCV(C=best_lasso_C, tol=2e-1)
+            fit = model.fit(trainx, trainy)
+            t_end = time()
+
+            met[ind, m, 0:2] = metrics(fit.coef_, fit.predict_proba(testx)[:, 1].flatten(), testy)
+
         met[ind, m, 2] = t_end - t_start
 
         if verbose:
@@ -105,12 +118,12 @@ for m in range(M):
         max_supp = trainx.shape[1]
         t_start = time()
         # model = abessLogistic(is_cv = True, path_type = "pgs", s_min = 0, s_max = 99, thread = 0)
-        model = LogisticRegression(cv=5, support_size = range(max_supp), thread=5, important_search=100,
-                                   approximate_Newton = True, primary_model_fit_epsilon=1e-6)
+        model = LogisticRegression(cv=5, support_size=range(max_supp), thread=5,
+                                   approximate_Newton=True, primary_model_fit_epsilon=1e-6)
         model.fit(trainx, trainy)
         t_end = time()
 
-        met[ind, m, 0:2] = metrics(model.coef_, model.predict_proba(testx), testy)
+        met[ind, m, 0:2] = metrics(model.coef_, model.predict_proba(testx)[:, 1].flatten(), testy)
         met[ind, m, 2] = t_end - t_start
 
         if verbose:
@@ -128,6 +141,7 @@ print("===== Results " + model_name + " =====")
 print("Method: \n", method)
 print("Metrics (AUC, NNZ, Runtime): \n", res[:, 0:3])
 
+file_name = "musk"
 if (res_output):
     np.save("{}_{}_res.npy".format(model_name, file_name), res)
     print("Result saved.")
