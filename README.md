@@ -1,7 +1,7 @@
 # Reproducible materials
 
 
-This repository contains scripts to reproduce the numerical results analysis described in "abess: A Fast Best-Subset Selection Library in Python and R". 
+This repository contains scripts to reproduce the numerical results analysis described in "[abess: A Fast Best-Subset Selection Library in Python and R](https://www.jmlr.org/papers/volume23/21-1060/21-1060.pdf)". 
 A step-by-step instruction for reproducting is provided in [this page](https://github.com/abess-team/abess/tree/master/docs/real-data).
 
 ## Citations
